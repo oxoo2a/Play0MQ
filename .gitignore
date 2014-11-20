@@ -1,0 +1,6 @@
+*.o
+*.bak
+*.sublime-project
+*.sublime-workspace
+*.bbprojectd
+play0mq
