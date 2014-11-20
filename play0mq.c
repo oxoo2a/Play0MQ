@@ -13,7 +13,7 @@ void usage (char *comment) {
 }
 
 bool isRole ( char *role, char *value ) {
-	return strncmp(role,value,strlen(role)) == 0;
+	return strcmp(role,value) == 0;
 }
 
 enum ROLE { SOURCE, BROKER, SINK };
