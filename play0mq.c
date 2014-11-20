@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <assert.h>
 
 #include <zmq.h>
 
@@ -12,7 +13,7 @@
 
 void pack_and_send ( void *s, char *identifier, long value ) {
 	static char buffer[1024];
-	sprintf(buffer,"<%s> <%ld>",identifier,value);
+	sprintf(buffer,"%s %ld",identifier,value);
 	printf("SEND: %s\n",buffer);
 	int len = strlen(buffer)+1;
 	zmq_msg_t m;
@@ -32,11 +33,11 @@ void recv_and_unpack ( void *s, char **identifier, long *value ) {
 	}
 	else {
 		static char buffer[1024];
-		printf("RECV: %s\n",(char *) zmq_msg_data(&m));
-		sscanf((char *) zmq_msg_data(&m),"<%s> <%ld>",buffer,value);
+		sscanf((char *) zmq_msg_data(&m),"%s %ld",buffer,value);
 		int identifier_len = strlen(buffer)+1;
 		*identifier = malloc(identifier_len);
 		memcpy(*identifier,buffer,identifier_len);
+		printf("RECV: %s %ld\n",*identifier,*value);
 	}
 	zmq_msg_close(&m);
 }
@@ -71,18 +72,32 @@ void play0mq_source ( int ac, char **av ) {
 //	********************************************************************************
 void play0mq_broker ( int ac, char **av ) {
 	void *context = zmq_ctx_new();
-	void *source = zmq_socket(context,ZMQ_REP);
+	
+	// Endpoint for source connections
 	char *broker_url = "tcp://*:4224";
+	void *source = zmq_socket(context,ZMQ_REP);
 	zmq_bind(source,broker_url);
-	printf("broker url = %s\n",broker_url);
+	printf("URL for connecting sources = %s\n",broker_url);
+	
+	// Endpoint for subscribers (sinks)
+	char *publish_url = "tcp://*:4225";
+	void *publish = zmq_socket(context,ZMQ_PUB);
+	zmq_bind(publish,publish_url);
+	printf("URL for connecting sinks = %s\n",publish_url);
+	zmq_bind(publish,"ipc://publish.ipc");
+		
 	while (true) {
 		char *identifier;
 		long number;
 		recv_and_unpack(source,&identifier,&number);
-		// Handle received data
 		pack_and_send(source,"ack",42);
+		// Handle received data
+		// 1. Anybody interested in numbers
+		pack_and_send(publish,identifier,number);
+		free(identifier);
 	}
 	zmq_close(source);
+	zmq_close(publish);
 	zmq_ctx_destroy(context);
 }
 
@@ -90,9 +105,24 @@ void play0mq_broker ( int ac, char **av ) {
 //	play0mq_sink
 //	********************************************************************************
 void play0mq_sink ( int ac, char **av ) {
+	if (ac < 2) failure("(1) URL of publisher and (2) one or more filter needed");
+	char *publisher = av[0];	
 	void *context = zmq_ctx_new();
-	for (int i=0; i<ac; i++)
-		printf("%d = %s\n",i,av[i]);
+	void *subscribe = zmq_socket(context,ZMQ_SUB);
+	zmq_connect(subscribe,publisher);
+	// register all filter
+	for (int f=1; f<ac; f++) {
+		zmq_setsockopt(subscribe,ZMQ_SUBSCRIBE,av[f],strlen(av[f]));
+	}
+	while (true) {
+		char *identifier;
+		long value;
+		recv_and_unpack(subscribe,&identifier,&value);
+		// Process received data
+		printf("SINK: %ld received with identifier %s\n",value,identifier);
+		free(identifier);
+	}
+	zmq_close(subscribe);
 	zmq_ctx_destroy(context);
 }
 
