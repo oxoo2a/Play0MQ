@@ -85,16 +85,24 @@ void play0mq_broker ( int ac, char **av ) {
 	zmq_bind(publish,publish_url);
 	printf("URL for connecting sinks = %s\n",publish_url);
 	zmq_bind(publish,"ipc://publish.ipc");
-		
+	
+	// Prepare listening on mulitple endpoints
+	zmq_pollitem_t endpoints[] = {
+		{ source, 0, ZMQ_POLLIN, 0 },
+		// { dispatch, 0, ZMQ_POLLIN, 0 }
+	};
+	
 	while (true) {
 		char *identifier;
 		long number;
-		recv_and_unpack(source,&identifier,&number);
-		pack_and_send(source,"ack",42);
-		// Handle received data
-		// 1. Anybody interested in numbers
-		pack_and_send(publish,identifier,number);
-		free(identifier);
+		
+		zmq_poll(endpoints,1,-1);
+		if (endpoints[0].revents & ZMQ_POLLIN) {
+			recv_and_unpack(source,&identifier,&number);
+			pack_and_send(source,"ack",42);
+			pack_and_send(publish,identifier,number);
+			free(identifier);
+		}
 	}
 	zmq_close(source);
 	zmq_close(publish);
