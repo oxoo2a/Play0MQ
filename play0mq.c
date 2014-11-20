@@ -1,9 +1,10 @@
-#include <zmq.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+
+#include <zmq.h>
 
 void usage (char *comment) {
 	fprintf(stderr,"usage: play0mq <role=source|broker|sink>\n");
