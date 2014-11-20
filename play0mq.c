@@ -21,8 +21,20 @@ void play0mq_source ( int ac, char **av ) {
 //	********************************************************************************
 void play0mq_broker ( int ac, char **av ) {
 	void *context = zmq_ctx_new();
-	for (int i=0; i<ac; i++)
-		printf("%d = %s\n",i,av[i]);
+	void *sources = zmq_socket(context,ZMQ_REP);
+	zmq_bind(sources,"tcp://*:4224");
+	while (true) {
+		zmq_msg_t message;
+		zmq_msg_init(&message);
+		int len = zmq_msg_recv(&message,sources,0);
+		if (size != -1) {
+			char *number = malloc(size+1);
+			memcpy(s,zmq_msg_data(&message),size);
+			s[size] = (char) 0;
+		}
+		zmq_msg_close(&message);
+	}
+	zmq_close(sources);
 	zmq_ctx_destroy(context);
 }
 
