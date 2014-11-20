@@ -7,12 +7,62 @@
 #include <zmq.h>
 
 //	********************************************************************************
+//	Packing and unpacking
+//	********************************************************************************
+
+void pack_and_send ( void *s, char *identifier, long value ) {
+	static char buffer[1024];
+	sprintf(buffer,"<%s> <%ld>",identifier,value);
+	printf("SEND: %s\n",buffer);
+	int len = strlen(buffer)+1;
+	zmq_msg_t m;
+	zmq_msg_init_size(&m,len);
+	memcpy(zmq_msg_data(&m),buffer,len);
+	zmq_msg_send(&m,s,0);
+	zmq_msg_close(&m);
+}
+
+void recv_and_unpack ( void *s, char **identifier, long *value ) {
+	zmq_msg_t m;
+	zmq_msg_init(&m);
+	int len = zmq_msg_recv(&m,s,0);
+	if (len == -1) {
+		*identifier = NULL;
+		*value = 0;
+	}
+	else {
+		static char buffer[1024];
+		printf("RECV: %s\n",(char *) zmq_msg_data(&m));
+		sscanf((char *) zmq_msg_data(&m),"<%s> <%ld>",buffer,value);
+		int identifier_len = strlen(buffer)+1;
+		*identifier = malloc(identifier_len);
+		memcpy(*identifier,buffer,identifier_len);
+	}
+	zmq_msg_close(&m);
+}
+
+void failure ( char *comment ) {
+	fprintf(stderr,"%s. Exiting ...",comment);
+	exit(-1);
+}
+
+//	********************************************************************************
 //	play0mq_source
 //	********************************************************************************
 void play0mq_source ( int ac, char **av ) {
+	if (ac != 1) failure("URL of broker needed");
+	char *broker_url = av[0];
 	void *context = zmq_ctx_new();
-	for (int i=0; i<ac; i++)
-		printf("%d = %s\n",i,av[i]);
+	void *broker = zmq_socket(context,ZMQ_REQ);
+	zmq_connect(broker,broker_url);
+	long number = 1;
+	while (true) {
+		pack_and_send(broker,"number",number);
+		char *identifier;
+		long value;
+		recv_and_unpack(broker, &identifier, &value);
+		number++;
+	}
 	zmq_ctx_destroy(context);
 }
 
@@ -21,20 +71,18 @@ void play0mq_source ( int ac, char **av ) {
 //	********************************************************************************
 void play0mq_broker ( int ac, char **av ) {
 	void *context = zmq_ctx_new();
-	void *sources = zmq_socket(context,ZMQ_REP);
-	zmq_bind(sources,"tcp://*:4224");
+	void *source = zmq_socket(context,ZMQ_REP);
+	char *broker_url = "tcp://*:4224";
+	zmq_bind(source,broker_url);
+	printf("broker url = %s\n",broker_url);
 	while (true) {
-		zmq_msg_t message;
-		zmq_msg_init(&message);
-		int len = zmq_msg_recv(&message,sources,0);
-		if (size != -1) {
-			char *number = malloc(size+1);
-			memcpy(s,zmq_msg_data(&message),size);
-			s[size] = (char) 0;
-		}
-		zmq_msg_close(&message);
+		char *identifier;
+		long number;
+		recv_and_unpack(source,&identifier,&number);
+		// Handle received data
+		pack_and_send(source,"ack",42);
 	}
-	zmq_close(sources);
+	zmq_close(source);
 	zmq_ctx_destroy(context);
 }
 
