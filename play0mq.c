@@ -70,21 +70,28 @@ void play0mq_source ( int ac, char **av ) {
 //	********************************************************************************
 //	play0mq_broker
 //	********************************************************************************
+
+void *zmq_endpoint ( void *context, int type, char *url, char *comment ) {
+	void *result = zmq_socket(context,type);
+	assert(result != NULL);
+	int rc = zmq_bind(result,url);
+	assert(rc == 0);
+	printf("New endpoint for %s at <%s>\n",comment,url);
+	return result;
+}
+
 void play0mq_broker ( int ac, char **av ) {
 	void *context = zmq_ctx_new();
 	
 	// Endpoint for source connections
-	char *broker_url = "tcp://*:4224";
-	void *source = zmq_socket(context,ZMQ_REP);
-	zmq_bind(source,broker_url);
-	printf("URL for connecting sources = %s\n",broker_url);
+	void *source = zmq_endpoint(context,ZMQ_REP,"tcp://*:4224","sources");
 	
 	// Endpoint for subscribers (sinks)
-	char *publish_url = "tcp://*:4225";
-	void *publish = zmq_socket(context,ZMQ_PUB);
-	zmq_bind(publish,publish_url);
-	printf("URL for connecting sinks = %s\n",publish_url);
+	void *publish = zmq_endpoint(context,ZMQ_PUB,"tcp://*:4225","sinks");
 	zmq_bind(publish,"ipc://publish.ipc");
+	
+	// Endpoint for workers (outgoing)
+	void *dispatch = zmq_endpoint(context,ZMQ_PUSH,"tcp://*:4226","workers");
 	
 	// Prepare listening on mulitple endpoints
 	zmq_pollitem_t endpoints[] = {
@@ -96,16 +103,21 @@ void play0mq_broker ( int ac, char **av ) {
 		char *identifier;
 		long number;
 		
-		zmq_poll(endpoints,1,-1);
+		endpoints[0].events = ZMQ_POLLIN;
+		endpoints[0].revents = 0;
+		int rc = zmq_poll(endpoints,1,-1);
+		assert(rc != -1);
 		if (endpoints[0].revents & ZMQ_POLLIN) {
 			recv_and_unpack(source,&identifier,&number);
 			pack_and_send(source,"ack",42);
 			pack_and_send(publish,identifier,number);
+			// pack_and_send(dispatch,identifier,number);
 			free(identifier);
 		}
 	}
 	zmq_close(source);
 	zmq_close(publish);
+	zmq_close(dispatch);
 	zmq_ctx_destroy(context);
 }
 
