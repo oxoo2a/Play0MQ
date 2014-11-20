@@ -103,8 +103,6 @@ void play0mq_broker ( int ac, char **av ) {
 		char *identifier;
 		long number;
 		
-		endpoints[0].events = ZMQ_POLLIN;
-		endpoints[0].revents = 0;
 		int rc = zmq_poll(endpoints,1,-1);
 		assert(rc != -1);
 		if (endpoints[0].revents & ZMQ_POLLIN) {
