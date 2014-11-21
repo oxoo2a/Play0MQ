@@ -58,14 +58,14 @@ void play0mq_source ( int ac, char **av ) {
 	zmq_connect(broker,broker_url);
 	long number = 1;
 	while (true) {
-		printf("SOURCE: Send number %ld to broker\n",number);
+		// printf("SOURCE: Send number %ld to broker\n",number);
 		pack_and_send(broker,"number",number,0);
 		char *identifier;
 		long value;
 		recv_and_unpack(broker, &identifier, &value);
 		assert(value == 42);
 		number++;
-		sleep(1);
+		// sleep(1);
 	}
 	zmq_ctx_destroy(context);
 }
@@ -107,15 +107,15 @@ void play0mq_broker ( int ac, char **av ) {
 		assert(rc != -1);
 		if (endpoints[0].revents & ZMQ_POLLIN) {
 			recv_and_unpack(source,&identifier,&number);
-			printf("BROKER: %ld with identifier %s received",number,identifier);
+			// printf("BROKER: %ld with identifier %s received",number,identifier);
 			pack_and_send(source,"ack",42,0);
 			pack_and_send(publish,identifier,number,0);
 			if (strcmp(identifier,"number") == 0) {
 				// Let a worker deal with that number
-				printf(" ... push to worker");
+				// printf(" ... push to worker");
 				pack_and_send(dispatch,identifier,number, ZMQ_DONTWAIT);
 			}
-			printf("\n");
+			// printf("\n");
 			free(identifier);
 		}
 	}
@@ -148,16 +148,18 @@ void play0mq_worker ( int ac, char **av ) {
 		char *identifier;
 		long number;
 		recv_and_unpack(dispatcher,&identifier,&number);
-		printf("WORKER: %ld is ",number);
+		// printf("WORKER: %ld is ",number);
 		if (isPrime(number)) {
 			pack_and_send(broker,"prime",number,0);
 			recv_and_unpack(broker,&identifier,&number);
 			assert(number == 42);
 			free(identifier);
-			printf("prime, return to broker\n");
+			// printf("prime, return to broker\n");
 		}
+		/*
 		else
 			printf("no prime\n");
+		*/
 	}
 	zmq_close(dispatcher);
 	zmq_close(broker);
